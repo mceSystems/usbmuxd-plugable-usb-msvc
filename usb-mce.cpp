@@ -1391,11 +1391,13 @@ static int usb_add_pending_device(PENDING_DEVICE_COMMAND_SOURCE source,
 	{
 		/* If we got here because we've received a device change notfication,
 		 * but couldn't find a monitored device, we'll ignore it */
-		if (FALSE && PENDING_DEVICE_COMMAND_SOURCE_MONITOR == source)
-		{
-			DEBUG_MCE("Ignoring device: %s", port_name);
-			return 0;
-		}
+
+
+		//if (PENDING_DEVICE_COMMAND_SOURCE_MONITOR == source)//i commented this code for multiflash - with this code idevicerestore fo not get device events stably
+		//{
+		//	DEBUG_MCE("Ignoring device: %s", port_name);
+		//	return 0;
+		//}
 
 		DEBUG_MCE("Adding a pending device: %s", port_name);
 		usb_dev = new usb_device;
@@ -1848,14 +1850,13 @@ static void usb_handle_port_failure(struct usb_device * dev,const char* caller, 
 		{
 			DEBUG_PRINT_ERROR("The device %d was removed unexpectedly", dev->location);
 		}
-		if (false)
-		{
-			usb_append_device_command(PENDING_DEVICE_COMMAND_REMOVE,
-				PENDING_DEVICE_COMMAND_SOURCE_MONITOR,
-				dev->location,
-				NULL,
-				DEVICE_MONITOR_DISABLE);
-		}
+
+		//	usb_append_device_command(PENDING_DEVICE_COMMAND_REMOVE,  //i commented this code for multiflash - with it idevicerestore do not get events stably
+		//		PENDING_DEVICE_COMMAND_SOURCE_MONITOR,
+		//		dev->location,
+		//		NULL,
+		//		DEVICE_MONITOR_DISABLE);
+		
 
 	}
 }
