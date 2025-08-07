@@ -29,6 +29,7 @@
  *****************************************************************************/
 USBMUXD_API BOOL usbmuxd_Start(WORD wPort, DWORD dwHubAddress, LPCWSTR pPluginPath)
 {
+
 	if (IS_USBMUXD_RUNNING())
 	{
 		DEBUG_PRINT_ERROR("usbmuxd was already started");
@@ -81,6 +82,8 @@ USBMUXD_API BOOL usbmuxd_Start(WORD wPort, DWORD dwHubAddress, LPCWSTR pPluginPa
 	}
 
 	/* Wait for the main thread to finish its initialization */
+	DWORD tim = INIT_TIMEOUT;
+	tim = 20000;
 	if (WAIT_OBJECT_0 != WaitForSingleObject(g_tContext.hReadyEvent, INIT_TIMEOUT))
 	{
 		DEBUG_PRINT_ERROR("Failed to wait for the main thread to finish its initialization");
@@ -485,7 +488,7 @@ static DWORD WINAPI MainThreadProc(void * pvParam)
 static BOOL SetDeviceMonitoring(LPCSTR pszPortName, enum device_monitor_state eMonitor)
 {
 	VERIFY_USBMUXD_IS_RUNNING();
-
+	DEBUG_MCE("SetDeviceMonitoring %s %s", pszPortName, MONITOR_STATE(eMonitor));
 	/* Parse the port number, which is used as the device's location */
 	uint32_t ulDeviceLocation = 0;
 	sscanf_s(pszPortName, MCE_PORT_NAME_FORMAT, &ulDeviceLocation);

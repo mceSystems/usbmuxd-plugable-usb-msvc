@@ -28,6 +28,7 @@
 /******************************************************************************
  * CreateNullSecurityAttributes Function
  *****************************************************************************/
+
 BOOL CreateNullSecurityAttributes(OUT LPSECURITY_ATTRIBUTES ptSecurityAttributes)
 {
 	if (NULL == ptSecurityAttributes)

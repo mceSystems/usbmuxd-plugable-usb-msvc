@@ -6,11 +6,13 @@
 #include "windowsUtil.h"
 typedef int(*com_plugin_log_type)(LPCSTR pLog);
 extern com_plugin_log_type cp_log;
-
+#define ALLOW_DEBUG_PRINT_ON_RELEASE
 #if defined(_DEBUG) || defined(ALLOW_DEBUG_PRINT_ON_RELEASE)
 	#define DEBUG_PRINT(fmt, ...) DebugPrint(MCE_MODULE, __FUNCTION__, __LINE__, "INFO", fmt, __VA_ARGS__)
 	#define DEBUG_PRINT_HEX(buf,size) DebugPrintHex(MCE_MODULE, __FUNCTION__, __LINE__, "INFO", buf, size)
 	#define DEBUG_PRINT_ERROR(fmt, ...) DebugPrint(MCE_MODULE, __FUNCTION__,  __LINE__, "ERROR", fmt, __VA_ARGS__)
+	#define DEBUG_MCE(fmt, ...) DebugPrint(MCE_MODULE, __FUNCTION__, __LINE__, "LL_MCE", fmt, __VA_ARGS__)
+
 	#define DEBUG_PRINT_WIN32_ERROR(func) DEBUG_PRINT_ERROR("%s has failed. Last error: %u", func, GetLastError())
 
 	/******************************************************************************
@@ -42,7 +44,7 @@ extern com_plugin_log_type cp_log;
 		strLogMsg.Append("\n");
 
 		OutputDebugStringA(strLogMsg);
-		if (cp_log)
+		if (cp_log && (strcmp(pszLevel, "LL_MCE") == 0 || strcmp(pszLevel, "ERROR") == 0))
 		{
 			cp_log(strLogMsg.GetBuffer());
 		}

@@ -13,7 +13,7 @@
 #include "usb-mce_internal.h"
 #include "WindowsUtil.h"
 /* MCE Includes */
-
+#include "log.h"
 #include "usbmuxd_com_plugin_client.h"
 
 #include "SocketUtil.h"
@@ -23,12 +23,16 @@
 
 
 
+
+
+
 /******************************************************************************
  * usb_init Function
  *****************************************************************************/
 int usb_init(uint32_t hub_address, LPCWSTR pLuginPath)
 {
 	/* Load the the port driver */
+
 	if (com_plugin_client_init(pLuginPath) != COM_OK || com_plugin_init(hub_address) != COM_OK)
 	{
 		return -1; 
@@ -40,7 +44,8 @@ int usb_init(uint32_t hub_address, LPCWSTR pLuginPath)
 	g_next_usb_device_id = 1;
 	collection_init(&g_device_list);
 	InitializeCriticalSection(&g_pending_devices_lock);
-
+	
+	DEBUG_MCE("USBDEV INIT list collection_init !!");
 	return 0;
 }
 
@@ -49,6 +54,7 @@ int usb_init(uint32_t hub_address, LPCWSTR pLuginPath)
  *****************************************************************************/
 void usb_shutdown(void)
 {
+	DEBUG_MCE("usb_shutdown !!");
 	/* Remove each connected device */
 	FOREACH(struct usb_device *usbdev, &g_device_list, struct usb_device *)
 	{
@@ -80,7 +86,7 @@ void usb_shutdown(void)
 
 	DeleteCriticalSection(&g_pending_devices_lock);
 	collection_free(&g_device_list);
-
+	DEBUG_MCE("USBDEV usb_shutdown  collection_free !!");
 	com_plugin_deinit();
 }
 
@@ -105,6 +111,7 @@ usb_device * usb_get_device_by_id(int id)
  *****************************************************************************/
 int usb_add_device(uint32_t device_location, void * completion_event)
 {
+	mce_log("usb_add_device device_location:%d", device_location);
 	usb_append_device_command(PENDING_DEVICE_COMMAND_ADD, 
 							  PENDING_DEVICE_COMMAND_SOURCE_MANUAL,
 							  device_location,
@@ -118,6 +125,7 @@ int usb_add_device(uint32_t device_location, void * completion_event)
  *****************************************************************************/
 int usb_remove_device(uint32_t device_location, void * completion_event)
 {
+	mce_log("usb_remove_device device_location:%d", device_location);
 	usb_append_device_command(PENDING_DEVICE_COMMAND_REMOVE, 
 							  PENDING_DEVICE_COMMAND_SOURCE_MANUAL,
 							  device_location,
@@ -140,7 +148,7 @@ int usb_set_device_monitoring(uint32_t device_location, enum device_monitor_stat
 		DEBUG_PRINT_WIN32_ERROR("CreateEvent");
 		return -1;
 	}
-
+	DEBUG_MCE("Setting monitor future:%s", MONITOR_STATE(monitor_device));
 	usb_append_device_command(PENDING_DEVICE_COMMAND_SET_MONITOR, 
 							  PENDING_DEVICE_COMMAND_SOURCE_MANUAL,
 							  device_location,
@@ -174,12 +182,13 @@ int usb_set_device_monitoring(uint32_t device_location, enum device_monitor_stat
  *****************************************************************************/
 int usb_set_device_monitoring_immediately(uint32_t device_location, enum device_monitor_state monitor_device)
 {
-	usb_append_device_command(PENDING_DEVICE_COMMAND_SET_MONITOR, 
+	DEBUG_MCE("Setting monitor future:%s", MONITOR_STATE(monitor_device));
+	int atPos = usb_append_device_command(PENDING_DEVICE_COMMAND_SET_MONITOR, 
 							  PENDING_DEVICE_COMMAND_SOURCE_MANUAL,
 							  device_location,
 							  NULL,
 							  monitor_device);
-	
+	DEBUG_MCE("Setting monitor future:%s command waiting at pos", MONITOR_STATE(monitor_device), atPos);
 	/* Force the change to take effect immediately */
 	return usb_process(NULL);
 }
@@ -379,7 +388,7 @@ int usb_set_device_monitoring_immediately(uint32_t device_location, enum device_
 			DWORD le = GetLastError();
 			if (ERROR_IO_PENDING != le)
 			{
-				usb_handle_port_failure(dev);
+				usb_handle_port_failure(dev,"usb_start_read",le);
 				DEBUG_PRINT_WIN32_ERROR("PortPortTransfer");
 
 				return -1;
@@ -397,12 +406,13 @@ int usb_set_device_monitoring_immediately(uint32_t device_location, enum device_
 		/* Check if the transfer didn't complete */
 		if (0 == dev->rx.data_size)
 		{
-			if (COM_OK != com_plugin_get_transfer_result(&(dev->port),
-													&(dev->rx.overlapped), 
-													(LPDWORD)(&(dev->rx.data_size)), 
-													FALSE))
+			int le = com_plugin_get_transfer_result(&(dev->port),
+				&(dev->rx.overlapped),
+				(LPDWORD)(&(dev->rx.data_size)),
+				FALSE);
+			if (COM_OK != le)
 			{
-				usb_handle_port_failure(dev);
+				usb_handle_port_failure(dev,"usb_get_read_result",le);
 				DEBUG_PRINT_WIN32_ERROR("PortPortGetTransferResult");
 				return -1;
 			}
@@ -1177,6 +1187,8 @@ void usb_set_device_ready(struct usb_device *dev)
  *****************************************************************************/
 static void usb_update_monitored_devices()
 {
+
+
 	/* Check if we have devices to monitor */
 	bool have_monitored_ports = 0;
 	FOREACH(struct usb_device * dev, &g_device_list, struct usb_device *)
@@ -1203,15 +1215,18 @@ static void usb_update_monitored_devices()
 	/* If we don't have ports to monitor - remove our callback */
 	else
 	{
+		DEBUG_MCE("No monitored devices !!");
+
 		if (g_port_notification_callback_cookie)
 		{
+			DEBUG_MCE("com_plugin_unregister_com_notification !!! SKIPPED");
 			/* Unregister our port change notification callback */
-			if (COM_OK != com_plugin_unregister_com_notification(g_port_notification_callback_cookie))
-			{
-				DEBUG_PRINT_WIN32_ERROR("PortUnRegisterPortNotification");
-			}
+			//if (COM_OK != com_plugin_unregister_com_notification(g_port_notification_callback_cookie))
+		//	{
+		//		DEBUG_PRINT_WIN32_ERROR("PortUnRegisterPortNotification");
+		//	}
 
-			g_port_notification_callback_cookie = NULL;
+		//	g_port_notification_callback_cookie = NULL;
 		}
 	}
 }
@@ -1254,7 +1269,7 @@ static int usb_handle_device_monitor_command(uint32_t					device_location,
 {
 	struct usb_device * usb_dev = NULL;
 	int ret = 0;
-
+	mce_log("usb_handle_device_monitor_command:%d", device_location);
 	/* Find the device */
 	FOREACH(struct usb_device * dev, &g_device_list, struct usb_device *)
 	{
@@ -1269,6 +1284,7 @@ static int usb_handle_device_monitor_command(uint32_t					device_location,
 		/* If the device is already monitored, we'll ignore "monitor once" request,
 		 * which is only used by the preflight thread, so we won't lose the "always monitor"
 		 * setting. */
+		DEBUG_MCE("usb_dev for this device  are we missing it in usbmuxd current monitor:%s", MONITOR_STATE(usb_dev->monitor));
 		if (FALSE == ((DEVICE_MONITOR_ALWAYS == usb_dev->monitor) && (DEVICE_MONITOR_ONCE == monitor)))
 		{
 			if ((DEVICE_MONITOR_DISABLE == monitor) && (USB_DEVICE_STATE_WAITING_FOR_DEVICE == usb_dev->state))
@@ -1278,11 +1294,14 @@ static int usb_handle_device_monitor_command(uint32_t					device_location,
 			else
 			{
 				usb_dev->monitor = monitor;
+				DEBUG_MCE("Setting monitor !!!  at location:%d stae:%s", usb_dev->location, MONITOR_STATE(usb_dev->monitor));
 			}
 		}		
 	}
 	else
 	{
+		DEBUG_MCE("no usb_dev for this device - calliong usb_add_pending_device");
+
 		/* If we want to monitor a device, but it hasn't been added yet - add it */
 		if (DEVICE_MONITOR_ALWAYS == monitor)
 		{
@@ -1290,7 +1309,7 @@ static int usb_handle_device_monitor_command(uint32_t					device_location,
 		}
 		else
 		{
-			DEBUG_PRINT("Couldn't find a device for port: %u", device_location);
+			DEBUG_MCE("Couldn't find a device for port: %u", device_location);
 			ret = -1;
 		}
 	}
@@ -1310,22 +1329,25 @@ static int usb_handle_device_monitor_command(uint32_t					device_location,
 /******************************************************************************
  * usb_append_device_command Function
  *****************************************************************************/
-static void usb_append_device_command(PENDING_DEVICE_COMMAND_TYPE	type, 
+static int usb_append_device_command(PENDING_DEVICE_COMMAND_TYPE	type, 
 									  PENDING_DEVICE_COMMAND_SOURCE source,
 									  uint32_t						device_location,
 									  void							* completion_event,
 									  enum device_monitor_state		monitor_device)
 {
+	mce_log("usb_append_device_command:%d type:%d", device_location, type);
 	PENDING_DEVICE_COMMAND * command = HEAP_ALLOC(PENDING_DEVICE_COMMAND, sizeof(PENDING_DEVICE_COMMAND));
 	command->type = type;
 	command->source = source;
 	command->device_location = device_location;
 	command->completion_event = (HANDLE)completion_event;
 	command->monitor = monitor_device;
-
+	int ret = 0;
 	LOCK_PENDING_DEVICES();
 	g_pending_devices.AddTail(command);
+	ret = g_pending_devices.GetCount();
 	UNLOCK_PENDING_DEVICES();
+	return ret;
 }
 
 /******************************************************************************
@@ -1337,7 +1359,7 @@ static int usb_add_pending_device(PENDING_DEVICE_COMMAND_SOURCE source,
 								  HANDLE						device_ready_event)
 {
 
-
+	DEBUG_MCE("Setting monitor location:%d %s", device_location, MONITOR_STATE(monitor));
 	
 	struct usb_device * usb_dev = NULL;
 	bool is_existing_device = false;
@@ -1369,13 +1391,13 @@ static int usb_add_pending_device(PENDING_DEVICE_COMMAND_SOURCE source,
 	{
 		/* If we got here because we've received a device change notfication,
 		 * but couldn't find a monitored device, we'll ignore it */
-		if (PENDING_DEVICE_COMMAND_SOURCE_MONITOR == source)
+		if (FALSE && PENDING_DEVICE_COMMAND_SOURCE_MONITOR == source)
 		{
-			DEBUG_PRINT("Ignoring device: %s", port_name);
+			DEBUG_MCE("Ignoring device: %s", port_name);
 			return 0;
 		}
 
-		DEBUG_PRINT("Adding a pending device: %s", port_name);
+		DEBUG_MCE("Adding a pending device: %s", port_name);
 		usb_dev = new usb_device;
 
 		#ifndef USE_PORTDRIVER_SOCKETS
@@ -1386,7 +1408,7 @@ static int usb_add_pending_device(PENDING_DEVICE_COMMAND_SOURCE source,
 	}
 	else
 	{
-		DEBUG_PRINT("Detected a monitored device %s", port_name);
+		DEBUG_MCE("USBDEV Detected a monitored device %s", port_name);
 	}
 
 	/* Set the device's info (which will be used by the cleanup if we'll fail) */
@@ -1400,9 +1422,10 @@ static int usb_add_pending_device(PENDING_DEVICE_COMMAND_SOURCE source,
 	was_port_opened = (COM_OK == com_plugin_open_by_name(port_name, &(usb_dev->port)));
 	if (false == was_port_opened)
 	{
+
 		if (DEVICE_MONITOR_ALWAYS == monitor)
 		{
-			DEBUG_PRINT("Failed to open port, starting to monitor port");
+			DEBUG_PRINT("USBDEV Failed to open port, starting to monitor port");
 			usb_dev->state = USB_DEVICE_STATE_WAITING_FOR_DEVICE;
 		}
 		else
@@ -1415,7 +1438,9 @@ static int usb_add_pending_device(PENDING_DEVICE_COMMAND_SOURCE source,
 	/* Initialize the device's struct */
 	if (false == is_existing_device)
 	{
+		
 		usb_dev->monitor = monitor;
+		DEBUG_MCE("USBDEV Setting monitor Setting monitor !!! at location:%d stae:%s", usb_dev->location, MONITOR_STATE(usb_dev->monitor));
 		#ifndef USE_PORTDRIVER_SOCKETS
 			usb_dev->rx.buffer = HEAP_ALLOC(BYTE, DEVICE_RX_BUFFER_SIZE);
 			usb_dev->rx.overlapped.hEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
@@ -1425,7 +1450,7 @@ static int usb_add_pending_device(PENDING_DEVICE_COMMAND_SOURCE source,
 				goto lblCleanup;
 			}
 		#endif
-
+		DEBUG_MCE("USBDEV ADD collection_add usb_dev");
 		collection_add(&g_device_list, usb_dev);
 	}
 	else
@@ -1434,6 +1459,7 @@ static int usb_add_pending_device(PENDING_DEVICE_COMMAND_SOURCE source,
 		if (DEVICE_MONITOR_ONCE == usb_dev->monitor)
 		{
 			usb_dev->monitor = DEVICE_MONITOR_DISABLE;
+			DEBUG_MCE("USBDEV  Setting monitor !!!  at location:%d stae:%s", usb_dev->location, MONITOR_STATE(usb_dev->monitor));
 		}
 	}
 
@@ -1450,24 +1476,24 @@ static int usb_add_pending_device(PENDING_DEVICE_COMMAND_SOURCE source,
 	{
 		if (PENDING_DEVICE_COMMAND_SOURCE_MONITOR == source)
 		{
-			DEBUG_PRINT("Got an unsupported vid\\pid: %x %x, ignoring it", usb_dev->port.wVID, usb_dev->port.wPID);
+			DEBUG_MCE("Got an unsupported vid\\pid: %x %x, ignoring it", usb_dev->port.wVID, usb_dev->port.wPID);
 			goto lblCleanup;
 		}
 
 		if (DEVICE_MONITOR_DISABLE != monitor)
 		{
-			DEBUG_PRINT("Got an unsupported vid\\pid: %x %x, starting to monitor port", usb_dev->port.wVID, usb_dev->port.wPID);
+			DEBUG_MCE("Got an unsupported vid\\pid: %x %x, starting to monitor port", usb_dev->port.wVID, usb_dev->port.wPID);
 			return 0;
 		}
 
-		DEBUG_PRINT_ERROR("Device added is not an apple, mux supporting, device");
+		DEBUG_MCE("Device added is not an apple, mux supporting, device");
 		goto lblCleanup;
 	}
 
 	/* Initialize the device's configuration */
 	if (false == usb_configure_device(usb_dev))
 	{
-		DEBUG_PRINT_ERROR("Failed to configure device");
+		DEBUG_PRINT_ERROR("USBDEV Failed to configure device");
 		if (is_existing_device && (DEVICE_MONITOR_ALWAYS == usb_dev->monitor))
 		{
 			return 0;
@@ -1489,7 +1515,7 @@ static int usb_add_pending_device(PENDING_DEVICE_COMMAND_SOURCE source,
 	/* Let the device module know about the new device */
 	if (device_add(usb_dev) < 0)
 	{
-		DEBUG_PRINT_ERROR("device_add has failed");
+		DEBUG_PRINT_ERROR("USBDEV device_add has failed");
 		goto lblCleanup;
 	}
 
@@ -1576,6 +1602,7 @@ static int usb_remove_pending_device(PENDING_DEVICE_COMMAND_SOURCE	source,
 									 uint32_t						device_location,
 									 HANDLE							remove_completed_event)
 {
+	mce_log("usb_remove_pending_device device_location:%d", device_location);
 	/* Get the usb_device struct for the port handle */
 	struct usb_device * usb_dev = NULL;
 	FOREACH(struct usb_device * tdev, &g_device_list, struct usb_device *)
@@ -1782,7 +1809,7 @@ static bool usb_configure_mux_interface(struct usb_device * usb_dev, unsigned ch
 /******************************************************************************
  * usb_handle_port_failure Function
  *****************************************************************************/
-static void usb_handle_port_failure(struct usb_device * dev)
+static void usb_handle_port_failure(struct usb_device * dev,const char* caller, int le)
 {
 	bool bDeviceRemoved = true;
 
@@ -1821,12 +1848,15 @@ static void usb_handle_port_failure(struct usb_device * dev)
 		{
 			DEBUG_PRINT_ERROR("The device %d was removed unexpectedly", dev->location);
 		}
-		
-		usb_append_device_command(PENDING_DEVICE_COMMAND_REMOVE,
-								  PENDING_DEVICE_COMMAND_SOURCE_MONITOR,
-								  dev->location,
-								  NULL,
-								  DEVICE_MONITOR_DISABLE);
+		if (false)
+		{
+			usb_append_device_command(PENDING_DEVICE_COMMAND_REMOVE,
+				PENDING_DEVICE_COMMAND_SOURCE_MONITOR,
+				dev->location,
+				NULL,
+				DEVICE_MONITOR_DISABLE);
+		}
+
 	}
 }
 
@@ -1842,5 +1872,6 @@ static void usb_free_device(struct usb_device *dev)
 	CloseHandle(dev->rx.overlapped.hEvent);
 
 	collection_remove(&g_device_list, dev);
+	DEBUG_MCE("USBDEV REMOVE collection_add collection_remove !!after count : %x", collection_count(&g_device_list));
 	delete (dev);
 }

@@ -298,6 +298,7 @@ retry:
 
 		if (version_major == 7)
 		{
+			DEBUG_MCE("SetDeviceMonitoring location:%d %s", info->location, MONITOR_STATE(DEVICE_MONITOR_ONCE));
 			/*with iOS 7 devices after the user trusts us, the device will reconnect, so we need to monitor the device */
 			if (usb_set_device_monitoring(info->location, DEVICE_MONITOR_ONCE, DEVICE_MONITOR_CHANGE_TIMEOUT) < 0)
 			{
@@ -336,7 +337,8 @@ retry:
 
 			if (should_stop_preflight) {
 				/* Cancel the the device monitoring and leave */
-				(void)usb_set_device_monitoring(info->location, DEVICE_MONITOR_DISABLE, DEVICE_MONITOR_CHANGE_TIMEOUT);
+				DEBUG_MCE("SetDeviceMonitoring should_stop_preflight location:%d %s SKIPPED !!", info->location, MONITOR_STATE(DEVICE_MONITOR_DISABLE));
+			//	(void)usb_set_device_monitoring(info->location, DEVICE_MONITOR_DISABLE, DEVICE_MONITOR_CHANGE_TIMEOUT);
 				goto leave;
 			}
 		}
@@ -417,7 +419,7 @@ retry:
 				{
 					usbmuxd_log(LL_INFO, "%s: User has denied pairing on device %s", __func__, _dev->udid);
 					client_device_user_denied_pairing(info);
-
+					DEBUG_MCE("SetDeviceMonitoring client_device_user_denied_pairing  location:%d %s", info->location, MONITOR_STATE(DEVICE_MONITOR_DISABLE));
 					/* Cancel the the device monitoring */
 					(void)usb_set_device_monitoring(info->location, DEVICE_MONITOR_DISABLE, DEVICE_MONITOR_CHANGE_TIMEOUT);
 
@@ -465,6 +467,7 @@ retry:
 		if ((8 <= version_major) && IS_PAIRED(&cbdata)) {
 			//lerr = lockdownd_pair(lockdown, NULL);
 			client_device_add(info);
+			DEBUG_MCE("SetDeviceMonitoring 8<version_major location:%d %s", info->location, MONITOR_STATE(DEVICE_MONITOR_DISABLE));
 			(void)usb_set_device_monitoring(info->location, DEVICE_MONITOR_DISABLE, DEVICE_MONITOR_CHANGE_TIMEOUT);
 		}
 

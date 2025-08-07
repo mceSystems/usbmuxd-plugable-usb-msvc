@@ -33,6 +33,7 @@ enum loglevel {
 	LL_DEBUG,
 	LL_SPEW,
 	LL_FLOOD,
+	LL_MCE
 };
 
 static int log_level;
@@ -42,6 +43,7 @@ static int log_level;
 
 #if defined(_DEBUG) || defined(ALLOW_DEBUG_PRINT_ON_RELEASE)
 	#define usbmuxd_log(level, fmt, ...) DebugPrint(MCE_MODULE, __FUNCTION__, __LINE__, #level, fmt, __VA_ARGS__)
+	#define mce_log(fmt, ...) DebugPrint(MCE_MODULE, __FUNCTION__, __LINE__, "LL_MCE", fmt, __VA_ARGS__)
 #else
 	#define usbmuxd_log(level, fmt, ...)
 #endif

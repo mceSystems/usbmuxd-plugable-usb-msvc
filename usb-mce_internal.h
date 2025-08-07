@@ -167,7 +167,7 @@ static HANDLE g_port_notification_callback_cookie;
  * Internal Functions Declarations
  *****************************************************************************/
 static void usb_port_change_callback(void * context, const DWORD event, const char * port_name);
-static void usb_append_device_command(PENDING_DEVICE_COMMAND_TYPE	type, 
+static int usb_append_device_command(PENDING_DEVICE_COMMAND_TYPE	type, 
 									  PENDING_DEVICE_COMMAND_SOURCE source,
 									  uint32_t						location,
 									  void							* completion_event,
@@ -186,7 +186,8 @@ static void usb_update_monitored_devices();
 static void usb_disconnect(struct usb_device * dev, bool manual_remove);
 static bool usb_configure_device(struct usb_device * usb_dev);
 static bool usb_configure_mux_interface(struct usb_device * usb_dev, unsigned char * config_desc);
-static void usb_handle_port_failure(struct usb_device * dev);
+static void usb_handle_port_failure(struct usb_device * dev,const char* caller, int le);
+
 static void usb_free_device(struct usb_device *dev);
 
 static void usb_report_device_already_exists(struct usb_device * dev);

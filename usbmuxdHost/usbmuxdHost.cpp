@@ -12,9 +12,17 @@
 #include "DebugPrint.h"
 #include "WindowsUtil.h"
 
+
 #define USBMUXD_HOST_MUTEX_NAME_FORMAT ("Global\\MCE_{15b31527-2034-4115-8036-e89ef3f4ee0d}_%u")
 #define USBMUXD_HOST_SHUTDOWN_EVENT_NAME_FORMAT ("Global\\MCE_{49facbfc-b65c-4bc5-85b0-7ac10307ec5f}_%u")
 #define USBMUXD_HOST_KEEPALIVE_EVENT_NAME_FORMAT ("Global\\MCE_{7fde2786-5bb0-4f3e-8e32-570244010db1}_%u")
+
+
+
+
+
+
+
 
 /******************************************************************************
  * RunUsbmuxdHost Function
@@ -22,6 +30,8 @@
 static int RunUsbmuxdHost(WORD wPort, DWORD dwHubAddress, LPCWSTR pszReadyEventName, LPCWSTR pszShutdownEventName, LPCWSTR pPluginPath, LPCWSTR pAutoShutdown)
 {
 	int iRet = EXIT_FAILURE;
+	//MessageBoxA(NULL, "RunUsbmuxdHost", "RunUsbmuxdHost", MB_OK);
+	OutputDebugStringA("UMDR 1 ");
 	CString autoshutdownSTR(pAutoShutdown);
 	BOOL bAutoShutdown = autoshutdownSTR.CompareNoCase("AutoShutdownTRUE") == 0;
 	CString strHostMutexName;
@@ -33,8 +43,37 @@ static int RunUsbmuxdHost(WORD wPort, DWORD dwHubAddress, LPCWSTR pszReadyEventN
 	DWORD dwNoDevicesTimestamp = 0;
 	HANDLE ahWaitEvents[WAIT_EVENTS_COUNT] = { NULL };
 
+	CStringA readyName; 
+	readyName.AppendFormat("UMDR Ready Event %ws ", pszReadyEventName);
+
+	OutputDebugStringA(readyName.GetBuffer());
 	HANDLE hReadEvent = OpenEventW(EVENT_MODIFY_STATE, FALSE, pszReadyEventName);
+	if (!hReadEvent) {
+		hReadEvent = CreateEventW(
+			/* lpEventAttributes */ NULL,
+			/* bManualReset */      FALSE,
+			/* bInitialState */     FALSE,
+			/* lpName */            pszReadyEventName
+			);
+
+		if (!hReadEvent) {
+			// handle error, e.g. log GetLastError()
+		}
+	}
 	HANDLE hShutdownEvent = OpenEventW(SYNCHRONIZE, FALSE, pszShutdownEventName);
+	if (!hShutdownEvent) {
+		hShutdownEvent = CreateEventW(
+			/* lpEventAttributes */ NULL,
+			/* bManualReset */      FALSE,
+			/* bInitialState */     FALSE,
+			/* lpName */            pszShutdownEventName
+			);
+
+		if (!hShutdownEvent) {
+			// handle error, e.g. log GetLastError()
+		}
+	}
+
 	if ((FALSE == IS_VALID_HANDLE(hReadEvent)) || (FALSE == IS_VALID_HANDLE(hShutdownEvent)))
 	{
 		DEBUG_PRINT_WIN32_ERROR("OpenEvent");
@@ -51,6 +90,7 @@ static int RunUsbmuxdHost(WORD wPort, DWORD dwHubAddress, LPCWSTR pszReadyEventN
 		DEBUG_PRINT_WIN32_ERROR("CreateMutexAllAccess");
 		goto lblCleanup;
 	}
+	OutputDebugStringA("UMDR 2 ");
 	/* Check if another instance is running */
 	if (ERROR_ALREADY_EXISTS == GetLastError())
 	{
@@ -86,7 +126,7 @@ static int RunUsbmuxdHost(WORD wPort, DWORD dwHubAddress, LPCWSTR pszReadyEventN
 
 		goto lblCleanup;
 	}
-
+	OutputDebugStringA("UMDR 3 ");
 	/* Create the keep alive event */
 	hKeepAliveEvent = CreateEventAllAccess(strKeepAliveEventName);
 	if (FALSE == IS_VALID_HANDLE(hKeepAliveEvent))
@@ -94,14 +134,15 @@ static int RunUsbmuxdHost(WORD wPort, DWORD dwHubAddress, LPCWSTR pszReadyEventN
 		DEBUG_PRINT_WIN32_ERROR("CreateEventAllAccess");
 		goto lblCleanup;
 	}
-
+	OutputDebugStringA("UMDR 4 ");
+	//MessageBoxA(NULL, "WTF", "WTF", MB_OK);
 	/* Start usbmuxd */
 	if (FALSE == usbmuxd_Start(wPort, dwHubAddress, pPluginPath))
 	{
-		DEBUG_PRINT_ERROR("Failed to start usbmuxd");
+		DEBUG_PRINT_ERROR("UMDR Failed to start usbmuxd");
 		goto lblCleanup;
 	}
-
+	OutputDebugStringA("UMDR 5 ");
 	/* Signal the usbmuxdHostClient we are ready */
 	if (FALSE == SetEvent(hReadEvent))
 	{
@@ -118,7 +159,7 @@ static int RunUsbmuxdHost(WORD wPort, DWORD dwHubAddress, LPCWSTR pszReadyEventN
 		{
 		/* Shutdown event */
 		case WAIT_OBJECT_0 + WAIT_EVENT_SHUTDOWN:
-			DEBUG_PRINT("Shutdown event was signaled");
+			DEBUG_MCE("Shutdown event was signaled");
 			bShouldShutdown = TRUE;
 			break;
 		
@@ -150,7 +191,7 @@ static int RunUsbmuxdHost(WORD wPort, DWORD dwHubAddress, LPCWSTR pszReadyEventN
 				{
 					if ((GetTickCount() - dwNoDevicesTimestamp) >= NO_DEVICES_SHUTDOWN_TIMEOUT)
 					{
-						DEBUG_PRINT("Shutting down because we don't have a device");
+						DEBUG_MCE("Shutting down because we don't have a device");
 						bShouldShutdown = TRUE;
 					}
 				}
@@ -242,7 +283,7 @@ int CALLBACK WinMain(HINSTANCE	hInstance,
 	{
 		__try
 		{
-			DEBUG_PRINT_ERROR("An unhandleded exception was caught: 0x%x", GetExceptionCode());
+			DEBUG_PRINT_ERROR("UMDR An unhandleded exception was caught: 0x%x", GetExceptionCode());
 		}
 		__except (EXCEPTION_EXECUTE_HANDLER) 
 		{

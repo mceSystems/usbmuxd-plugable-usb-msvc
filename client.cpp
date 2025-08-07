@@ -389,7 +389,7 @@ static int send_device_list(struct mux_client *client, uint32_t tag)
 	struct device_info *devs = NULL;
 	struct device_info *dev;
 	int i;
-	
+	mce_log("send_device_list");
 	///////////////////////////////////////////////////////
 	// add support for MCE_INCLUDE_HIDDEN_DEVICES env var
 	int include_hidden = 0;
@@ -476,6 +476,7 @@ static int send_pair_record(struct mux_client *client, uint32_t tag, const char*
 
 static int notify_device_add(struct mux_client *client, struct device_info *dev)
 {
+	mce_log("notify_device_add id:%d location:%d serial:%s pid:%x", dev->id, dev->location, dev->serial, dev->pid);
 	int res = -1;
 	if (client->proto_version == 1) {
 		/* XML plist packet */
@@ -498,6 +499,7 @@ static int notify_device_add(struct mux_client *client, struct device_info *dev)
 
 static int notify_device_remove(struct mux_client *client, uint32_t device_id)
 {
+	mce_log("notify_device_remove id:%d ", device_id);
 	int res = -1;
 	if (client->proto_version == 1) {
 		/* XML plist packet */
@@ -522,6 +524,7 @@ static int start_listen(struct mux_client *client)
 	client->state = CLIENT_LISTEN;
 
 	count = device_get_list(0, &devs);
+
 	dev = devs;
 	for(i=0; devs && i < count; i++) {
 		if(notify_device_add(client, dev++) < 0) {
@@ -701,6 +704,9 @@ static int handle_add_device_command(struct mux_client *client, struct usbmuxd_h
 {
 	/* Get the device location */
 	uint32_t device_location = get_device_location_from_device_command(command_dict);
+
+	mce_log("handle_add_device_command device_location:%d", device_location);
+
 	if (!device_location) {
 		(void)send_result(client, hdr->tag, RESULT_BADCOMMAND);
 		return -1;
@@ -708,7 +714,7 @@ static int handle_add_device_command(struct mux_client *client, struct usbmuxd_h
 
 	/* Add the device */
 	if (usb_add_device(device_location, NULL) < 0) {
-		usbmuxd_log(LL_ERROR, "Failed to add %s", device_location);
+		mce_log("Failed to add %s", device_location);
 		(void)send_result(client, hdr->tag, -EIO);
 		return -1;
 	}
@@ -721,8 +727,10 @@ static int handle_add_device_command(struct mux_client *client, struct usbmuxd_h
 
 static int handle_remove_device_command(struct mux_client *client, struct usbmuxd_header *hdr, plist_t command_dict)
 {
+	
 	/* Get the device location */
 	uint32_t device_location = get_device_location_from_device_command(command_dict);
+	mce_log("handle_remove_device_command device_location:%d", device_location);
 	if (!device_location) {
 		(void)send_result(client, hdr->tag, RESULT_BADCOMMAND);
 		return -1;
@@ -730,7 +738,7 @@ static int handle_remove_device_command(struct mux_client *client, struct usbmux
 
 	/* remove the device */
 	if (usb_remove_device(device_location, NULL) < 0) {
-		usbmuxd_log(LL_ERROR, "Failed to remove %s", device_location);
+		mce_log( "Failed to remove %s", device_location);
 		(void)send_result(client, hdr->tag, -EIO);
 		return -1;
 	}
@@ -745,6 +753,7 @@ static int handle_device_monitor_command(struct mux_client *client, struct usbmu
 {
 	/* Get the device location */
 	uint32_t device_location = get_device_location_from_device_command(command_dict);
+	mce_log("handle_device_monitor_command device_location:%d", device_location);
 	if (!device_location) {
 		(void)send_result(client, hdr->tag, RESULT_BADCOMMAND);
 		return -1;
@@ -760,7 +769,7 @@ static int handle_device_monitor_command(struct mux_client *client, struct usbmu
 	/* Set the device's monitoring state */
 	device_monitor_state monitor_state = auto_monitor ? DEVICE_MONITOR_ALWAYS : DEVICE_MONITOR_DISABLE;
 	if (usb_set_device_monitoring_immediately(device_location, monitor_state) < 0) {
-		usbmuxd_log(LL_ERROR, "Failed to set %d monitoring state", device_location);
+		mce_log( "Failed to set %d monitoring state", device_location);
 		(void)send_result(client, hdr->tag, -EIO);
 		return -1;
 	}
@@ -783,7 +792,7 @@ static int handle_client_plist_command(struct mux_client *client, struct usbmuxd
 
 	plist_from_xml(payload, payload_size, &command_dict);
 	if (!command_dict) {
-		usbmuxd_log(LL_ERROR, "Could not parse plist from payload!");
+		mce_log( "Could not parse plist from payload!");
 		return -1;
 	} 
 	
@@ -791,7 +800,7 @@ static int handle_client_plist_command(struct mux_client *client, struct usbmuxd
 	plist_t node = plist_dict_get_item(command_dict, "MessageType");
 	plist_get_string_val(node, &message);
 	if (!message) {
-		usbmuxd_log(LL_ERROR, "Could not extract MessageType from plist!");
+		mce_log("Could not extract MessageType from plist!");
 		plist_free(command_dict);
 		return -1;
 	}
@@ -1029,7 +1038,7 @@ void client_device_add(struct device_info *dev)
 	device_set_visible(dev->id);
 
 	pthread_mutex_lock(&client_list_mutex);
-	usbmuxd_log(LL_DEBUG, "client_device_add: id %d, location 0x%x, serial %s", dev->id, dev->location, dev->serial);
+	usbmuxd_log(LL_MCE, "client_device_add: id %d, location 0x%x, serial %s", dev->id, dev->location, dev->serial);
 	
 	FOREACH(struct mux_client *client, &client_list, struct mux_client *)
 	{
@@ -1043,7 +1052,7 @@ void client_device_remove(int device_id)
 {
 	pthread_mutex_lock(&client_list_mutex);
 	uint32_t id = device_id;
-	usbmuxd_log(LL_DEBUG, "client_device_remove: id %d", device_id);
+	usbmuxd_log(LL_MCE, "client_device_remove: id %d", device_id);
 	FOREACH(struct mux_client *client, &client_list, struct mux_client *)
 	{
 		if(client->state == CLIENT_LISTEN)

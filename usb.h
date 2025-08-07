@@ -57,6 +57,10 @@ enum device_monitor_state
 	DEVICE_MONITOR_DISABLE
 };
 
+#define MONITOR_STATE(x) DEVICE_MONITOR_DISABLE == x ? "Disabled" : DEVICE_MONITOR_ALWAYS == x ? "Always" : "Once"
+
+
+
 int usb_init(uint32_t hub_address, LPCWSTR pLuginPath);
 void usb_shutdown(void);
 int usb_send(struct usb_device *dev, const unsigned char *buf, int length);
